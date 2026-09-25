@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -26,3 +29,11 @@ jobs:
           $proc = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
           if (-not $proc.WaitForExit(45000)) { Stop-Process -Id $proc.Id -Force; throw 'GUI smoke test timed out' }
           if ($proc.ExitCode -ne 0) { throw "GUI smoke test failed: $($proc.ExitCode)" }
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest *> $null
+          if ($LASTEXITCODE -eq 0) { gh release delete latest --cleanup-tag -y }
+          gh release create latest "dist/FLAC2AAC.exe#FLAC2AAC.exe" --target "${{ github.sha }}" --title "FLAC2AAC latest" --notes "Latest verified Windows standalone build."
