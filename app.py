@@ -32,14 +32,14 @@ def key(s: str) -> str:
 
 
 def join_artist_values(values) -> str:
-    """여러 artist 계열 값을 '; ' 구분자로 일관되게 표시한다."""
+    """여러 artist 계열 값을 ', ' 구분자로 일관되게 표시한다."""
     parts = []
     for value in values or []:
         for part in re.split(r"\s*;\s*", str(value)):
             part = part.strip()
             if part and part not in parts:
                 parts.append(part)
-    return "; ".join(parts)
+    return ", ".join(parts)
 
 
 def inferred_title(path: Path) -> str:
