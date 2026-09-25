@@ -9,6 +9,7 @@ FLAC 라이브러리와 LRC 가사를 한 번에 스캔해 중복 곡을 정리�
 - 선택한 음악 루트 폴더를 **하위 폴더까지 재귀 검색**
 - `.flac` / `.lrc` 파일을 전체 라이브러리에서 함께 탐색
 - FLAC의 `TITLE` 메타데이터를 우선 사용
+- FLAC에 `ARTIST`가 여러 개 있으면 `Artist A; Artist B`처럼 **`; ` 구분자**로 합쳐 GUI/파일명에 사용
 - TITLE이 없거나 FLAC을 정상 파싱하지 못하면 파일명에서 제목 추론
   - `Artist - Title.flac` → `Title`
   - 구분자가 없으면 파일명 전체를 제목으로 사용
@@ -117,8 +118,10 @@ FFmpeg의 자동 metadata copy에 의존하지 않고, 변환 후 Mutagen으로 
 지원하는 표준 태그:
 - Title
 - Artist
+  - 여러 `ARTIST` 값은 `Artist A; Artist B`처럼 `; `로 합쳐 M4A Artist 태그에 저장
 - Album
 - Album Artist
+  - 여러 `ALBUMARTIST` 값도 같은 방식으로 `; ` 구분자를 사용
 - Composer
 - Date / Year
 - Genre
@@ -164,6 +167,7 @@ output/
 
 기본 파일명:
 - Artist와 Title이 있으면 → `Artist - Title.m4a`
+- Artist가 여러 명이면 → `Artist A; Artist B - Title.m4a`
 - Artist가 없으면 → `Title.m4a`
 - Title도 없으면 → 원본 파일명 기반
 
