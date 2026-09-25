@@ -31,6 +31,17 @@ def key(s: str) -> str:
     return NONWORD_RE.sub("", norm(s))
 
 
+def join_artist_values(values) -> str:
+    """여러 artist 계열 값을 '; ' 구분자로 일관되게 표시한다."""
+    parts = []
+    for value in values or []:
+        for part in re.split(r"\s*;\s*", str(value)):
+            part = part.strip()
+            if part and part not in parts:
+                parts.append(part)
+    return "; ".join(parts)
+
+
 def inferred_title(path: Path) -> str:
     stem = norm(path.stem)
     parts = re.split(r"\s+-\s+", stem, maxsplit=1)
@@ -110,6 +121,7 @@ def load_flac(path: Path) -> FlacItem:
         a = FLAC(path)
         tags = {k.lower(): [str(v) for v in vals] for k, vals in (a.tags.items() if a.tags else [])}
         firstv = lambda n: (tags.get(n, [""])[0] if tags.get(n) else "").strip()
+        artist = join_artist_values(tags.get("artist", []))
         # 중복일 때 더 좋은 원본을 남기기 위한 점수:
         # 1) 앨범아트 존재, 2) 태그 수, 3) 비트심도, 4) 샘플레이트, 5) 파일 크기
         has_art = 1 if getattr(a, "pictures", None) else 0
@@ -118,7 +130,7 @@ def load_flac(path: Path) -> FlacItem:
         sr = int(getattr(a.info, "sample_rate", 0) or 0)
         size = path.stat().st_size if path.exists() else 0
         score = (has_art, tag_count, bits, sr, size)
-        return FlacItem(path, firstv("title") or inferred_title(path), firstv("artist"), tags, score)
+        return FlacItem(path, firstv("title") or inferred_title(path), artist, tags, score)
     except Exception:
         size = path.stat().st_size if path.exists() else 0
         return FlacItem(path, inferred_title(path), "", {}, (0, 0, 0, 0, size))
@@ -271,7 +283,14 @@ def copy_meta(src_path: Path, dst_path: Path, lrc: LrcItem | None):
     st = {k.lower(): [str(v) for v in vals] for k, vals in (src.tags.items() if src.tags else [])}
     seen = set()
     for sk, atom in STD.items():
-        if st.get(sk) and atom not in seen: tags[atom] = st[sk]; seen.add(atom)
+        if st.get(sk) and atom not in seen:
+            if sk in {"artist", "albumartist", "album artist"}:
+                joined = join_artist_values(st[sk])
+                if joined:
+                    tags[atom] = [joined]
+            else:
+                tags[atom] = st[sk]
+            seen.add(atom)
     tr = num_total(first(st,"tracknumber"), first(st,"tracktotal","totaltracks"))
     ds = num_total(first(st,"discnumber"), first(st,"disctotal","totaldiscs"))
     if tr != (0,0): tags["trkn"] = [tr]
