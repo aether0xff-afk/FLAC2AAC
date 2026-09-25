@@ -1,0 +1,28 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -r requirements-dev.txt
+      - name: Test
+        run: python -m pytest -q
+      - name: Build
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name FLAC2AAC --collect-all PyQt6 app.py
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path dist/FLAC2AAC.exe
+          $proc = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $proc.WaitForExit(45000)) { Stop-Process -Id $proc.Id -Force; throw 'GUI smoke test timed out' }
+          if ($proc.ExitCode -ne 0) { throw "GUI smoke test failed: $($proc.ExitCode)" }
