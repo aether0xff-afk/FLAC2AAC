@@ -120,7 +120,7 @@ def test_end_to_end_flac_to_aac_with_metadata_artwork_and_lyrics(tmp_path):
     assert mp4.tags["\xa9gen"] == ["Test Genre"]
     assert mp4.tags["\xa9day"] == ["2026"]
     assert mp4.tags["tmpo"] == [123]
-    assert mp4.tags["cpil"] == [True]
+    assert mp4.tags["cpil"] is True
     assert mp4.tags["\xa9lyr"] == ["First line\nSecond line"]
     assert mp4.tags["covr"]
     assert "----:com.apple.iTunes:FLAC_CUSTOMTAG" in mp4.tags
