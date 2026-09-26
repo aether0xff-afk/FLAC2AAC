@@ -2,14 +2,13 @@ name: Build Windows EXE
 
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: flac2aac-windows-release
+  group: flac2aac-windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -93,6 +92,7 @@ jobs:
           Write-Host "GUI_SMOKE_TEST=OK"
 
       - name: Publish verified latest release
+        if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: \${{ github.token }}
