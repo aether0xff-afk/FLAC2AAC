@@ -245,9 +245,10 @@ def load_flac(path: Path) -> FlacItem:
 
 
 def canonical_artist_key(item: FlacItem) -> str:
-    parts = item.artists or split_artist_values([item.artist])
-    keys = sorted({key(part) for part in parts if key(part)})
-    return "&".join(keys)
+    # Be conservative: normalize the displayed artist string, but do not
+    # reorder collaborators. False-positive deduplication is worse than
+    # leaving an occasional duplicate in the conversion list.
+    return key(item.artist)
 
 
 def dedup_key(item: FlacItem) -> str:
