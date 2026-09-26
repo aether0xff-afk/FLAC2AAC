@@ -121,7 +121,7 @@ def test_lrc_prefers_exact_stem_then_same_directory(tmp_path):
     assert by_artist["Artist B"].lrc.path == other
 
 
-def test_dedup_artist_order_is_canonical():
+def test_dedup_does_not_reorder_artist_credit():
     one = app.FlacItem(
         Path("one.flac"),
         "Song",
@@ -141,6 +141,5 @@ def test_dedup_artist_order_is_canonical():
 
     kept, removed = app.deduplicate_flacs([one, two])
 
-    assert removed == 1
-    assert len(kept) == 1
-    assert kept[0].path == Path("one.flac")
+    assert removed == 0
+    assert len(kept) == 2
