@@ -179,7 +179,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Collect FLAC metadata and raw LRC files for private smoke testing."
     )
-    parser.add_argument("music_root", type=Path)
+    parser.add_argument("music_root", nargs="?", type=Path)
     parser.add_argument(
         "-o",
         "--output",
@@ -193,6 +193,19 @@ def main() -> int:
         default=min(16, max(4, os.cpu_count() or 4)),
     )
     args = parser.parse_args()
+
+    if args.music_root is None:
+        from PyQt6.QtWidgets import QApplication, QFileDialog
+        app = QApplication.instance() or QApplication([])
+        selected = QFileDialog.getExistingDirectory(
+            None,
+            "Smoke fixture로 수집할 음악 폴더 선택",
+            str(Path.home()),
+        )
+        if not selected:
+            print("Folder selection cancelled.", file=sys.stderr)
+            return 2
+        args.music_root = Path(selected)
 
     if not args.music_root.is_dir():
         print(f"Not a directory: {args.music_root}", file=sys.stderr)
