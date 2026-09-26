@@ -308,3 +308,90 @@ dist\FLAC2AAC.exe
 - 중복 곡은 하나만 변환
 - Apple Music/iPad에서 사용할 수 있는 M4A 메타데이터와 일반 텍스트 가사 생성
 - 변환 과정에서 원본 라이브러리는 건드리지 않기
+
+
+## 실제 음악 라이브러리 기반 smoke fixture
+
+실제 음악 파일 자체를 GitHub에 올리지 않고, **네 음악 폴더의 FLAC 메타데이터 + 실제 LRC 파일만** private fixture로 수집해서 smoke test에 사용할 수 있습니다.
+
+수집되는 것:
+- FLAC 상대 경로
+- Vorbis Comment 전체 태그
+- sample rate / bit depth / channels / duration
+- 앨범아트의 MIME / 크기 / SHA-256 같은 특성 정보
+- 실제 LRC 파일 원본 바이트
+- LRC 인코딩 추정값
+- FLAC/LRC 개수와 간단한 통계
+
+수집하지 않는 것:
+- FLAC 오디오 본문
+- 절대 경로
+- 실제 앨범아트 이미지 원본
+
+기본 fixture 경로인 `.smoke-data/`는 `.gitignore`에 포함되어 있어 public repo에 실수로 올라가지 않도록 했습니다.
+
+### 1. 네 음악 폴더에서 fixture 수집
+
+PowerShell에서 repo 루트 기준:
+
+```powershell
+py -3 tools/collect_smoke_fixture.py "D:\Music"
+```
+
+다른 위치에 저장하려면:
+
+```powershell
+py -3 tools/collect_smoke_fixture.py "D:\Music" -o "D:\FLAC2AAC-smoke"
+```
+
+생성 예:
+
+```text
+.smoke-data/
+  manifest.json
+  collection-summary.json
+  lrc/
+    Artist/
+      Album/
+        Artist - Song.lrc
+```
+
+### 2. 실제 fixture로 smoke 실행
+
+```powershell
+py -3 tools/run_smoke_fixture.py .smoke-data
+```
+
+기본 동작:
+- manifest에 기록된 **모든 FLAC 메타데이터를 이용해 0.08초 synthetic FLAC 재생성**
+- 실제 LRC 파일은 원래 상대 경로 그대로 복원
+- 전체 synthetic library를 FLAC2AAC의 실제 scanner로 검색
+- 실제 중복 제거 및 LRC 1:1 매칭 수행
+- 다양성이 높은 곡을 기본 30개 선택
+- 실제 FFmpeg로 AAC-LC 변환
+- 생성된 M4A를 Mutagen/FFprobe로 다시 열어 검증
+
+검증 항목:
+- AAC codec / LC profile
+- Title / Artist
+- 여러 Artist의 comma 표기
+- LRC 임베딩 여부
+- output 단일 폴더 생성
+- 실제 라이브러리의 Unicode/특수문자/인코딩 패턴
+- 중복 제거 및 LRC 매칭이 전체 라이브러리 규모에서도 예외 없이 동작하는지
+
+변환 검증 개수 변경:
+
+```powershell
+py -3 tools/run_smoke_fixture.py .smoke-data --convert-limit 100
+```
+
+완료되면:
+
+```text
+.smoke-data/last-smoke-report.json
+```
+
+에 결과를 남깁니다.
+
+이 방식은 **실제 음악 라이브러리의 구조와 태그/LRC 특성을 그대로 사용하면서 오디오 원본은 테스트 데이터에 포함하지 않는 것**이 목적입니다.
