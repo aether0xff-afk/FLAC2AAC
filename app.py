@@ -7,7 +7,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -65,8 +64,12 @@ def norm(value: str) -> str:
 
 
 def key(value: str) -> str:
-    """Matching key that keeps letters/numbers from every Unicode script."""
-    return "".join(ch for ch in norm(value) if ch.isalnum())
+    """Loose matching key: Unicode letters/numbers, case/spacing/diacritics ignored."""
+    folded = unicodedata.normalize("NFKD", norm(value))
+    return "".join(
+        ch for ch in folded
+        if ch.isalnum() and not unicodedata.combining(ch)
+    )
 
 
 def split_artist_values(values) -> tuple[str, ...]:
@@ -110,15 +113,21 @@ def inferred_artist(path: Path) -> str:
 
 def read_text(path: Path) -> str:
     raw = path.read_bytes()
-    for enc in (
-        "utf-8-sig",
-        "utf-8",
-        "cp949",
-        "euc-kr",
-        "utf-16",
-        "utf-16-le",
-        "utf-16-be",
-    ):
+
+    # BOM-aware decoding first.
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig")
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+
+    # UTF-16 files without a BOM often contain many NUL bytes. Try the likely
+    # byte order before legacy Korean encodings so they are not mis-decoded.
+    if raw and raw.count(b"\x00") / len(raw) > 0.10:
+        encodings = ("utf-16-le", "utf-16-be", "utf-8", "cp949", "euc-kr")
+    else:
+        encodings = ("utf-8", "cp949", "euc-kr", "utf-16-le", "utf-16-be")
+
+    for enc in encodings:
         try:
             return raw.decode(enc)
         except UnicodeDecodeError:
@@ -289,11 +298,19 @@ def lrc_artist_score(flac: FlacItem, lrc: LrcItem) -> int:
     if lrc_key == key(flac.artist):
         return 2
 
-    for artist in (flac.artists or split_artist_values([flac.artist])):
-        artist_key = key(artist)
-        if artist_key and (artist_key == lrc_key or artist_key in lrc_key):
-            return 1
-    return 0
+    # Partial credit only for exact artist components, never substring matches
+    # such as "A" accidentally matching "Adele".
+    lrc_parts = {
+        key(part)
+        for part in re.split(r"\s*[;,]\s*", lrc.artist)
+        if key(part)
+    }
+    flac_parts = {
+        key(part)
+        for part in (flac.artists or split_artist_values([flac.artist]))
+        if key(part)
+    }
+    return 1 if flac_parts & lrc_parts else 0
 
 
 def same_parent(a: Path, b: Path) -> bool:
