@@ -383,7 +383,7 @@ def safe_output_stem(text: str) -> str:
     stem = WINDOWS_BAD_NAME_RE.sub("_", display_text(text)).strip().rstrip(". ")
     if not stem:
         stem = "Untitled"
-    if stem.upper() in WINDOWS_RESERVED_NAMES:
+    if stem.split(".", 1)[0].upper() in WINDOWS_RESERVED_NAMES:
         stem = "_" + stem
     # Keep margin for extension and full-path overhead on Windows.
     return stem[:180].rstrip(". ") or "Untitled"
