@@ -95,10 +95,10 @@ jobs:
         if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release view latest *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release delete latest --cleanup-tag -y
           }
-          gh release create latest "dist/FLAC2AAC.exe#FLAC2AAC.exe" "dist/FLAC2AAC.exe.sha256.txt#FLAC2AAC.exe.sha256.txt" --target "\${{ github.sha }}" --title "FLAC2AAC latest" --notes "Verified Windows standalone build. Unit tests, real FLAC-to-AAC end-to-end test, bundle validation, and GUI smoke test all passed."
+          gh release create latest "dist/FLAC2AAC.exe#FLAC2AAC.exe" "dist/FLAC2AAC.exe.sha256.txt#FLAC2AAC.exe.sha256.txt" --target "${{ github.sha }}" --title "FLAC2AAC latest" --notes "Verified Windows standalone build. Unit tests, real FLAC-to-AAC end-to-end test, bundle validation, and GUI smoke test all passed."
