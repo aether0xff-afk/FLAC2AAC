@@ -42,7 +42,7 @@ jobs:
 
       - name: Run unit and end-to-end tests
         run: |
-          python -m compileall -q app.py tests
+          python -m compileall -q app.py tests tools
           python -m pytest -q
 
       - name: Build optimized standalone EXE
