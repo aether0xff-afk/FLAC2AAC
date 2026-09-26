@@ -8,32 +8,97 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: flac2aac-windows-release
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Install
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install Python dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Test
-        run: python -m pytest -q
-      - name: Build
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name FLAC2AAC --collect-all PyQt6 app.py
-      - name: Smoke test
+
+      - name: Ensure FFmpeg and FFprobe
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+          }
+          ffmpeg -version
+          ffprobe -version
+
+      - name: Run unit and end-to-end tests
+        run: |
+          python -m compileall -q app.py tests
+          python -m pytest -q
+
+      - name: Build optimized standalone EXE
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name FLAC2AAC app.py
+
+      - name: Verify standalone bundle
         shell: pwsh
         run: |
           $exe = Resolve-Path dist/FLAC2AAC.exe
-          $proc = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
-          if (-not $proc.WaitForExit(45000)) { Stop-Process -Id $proc.Id -Force; throw 'GUI smoke test timed out' }
-          if ($proc.ExitCode -ne 0) { throw "GUI smoke test failed: $($proc.ExitCode)" }
-      - name: Publish release
+          $size = (Get-Item $exe).Length
+          Write-Host "EXE_BYTES=$size"
+          if ($size -lt 15000000) { throw "EXE unexpectedly small" }
+
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+            throw "Not a Windows PE executable"
+          }
+
+          $listing = python -m PyInstaller.utils.cliutils.archive_viewer $exe -r -l
+          if (-not ($listing | Select-String -SimpleMatch "PyQt6")) {
+            throw "PyQt6 missing from bundle"
+          }
+          if (-not ($listing | Select-String -SimpleMatch "mutagen")) {
+            throw "Mutagen missing from bundle"
+          }
+          if (-not ($listing | Select-String -SimpleMatch "python312.dll")) {
+            throw "Python runtime missing from bundle"
+          }
+
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  FLAC2AAC.exe" | Set-Content -Encoding ascii dist/FLAC2AAC.exe.sha256.txt
+          Write-Host "EXE_SHA256=$hash"
+          Write-Host "BUNDLE_CHECK=OK"
+
+      - name: Smoke test real EXE
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path dist/FLAC2AAC.exe
+          $proc = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $proc.WaitForExit(45000)) {
+            Stop-Process -Id $proc.Id -Force
+            throw "GUI smoke test timed out"
+          }
+          if ($proc.ExitCode -ne 0) {
+            throw "GUI smoke test failed: $($proc.ExitCode)"
+          }
+          Write-Host "GUI_SMOKE_TEST=OK"
+
+      - name: Publish verified latest release
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: \${{ github.token }}
         run: |
           gh release view latest *> $null
-          if ($LASTEXITCODE -eq 0) { gh release delete latest --cleanup-tag -y }
-          gh release create latest "dist/FLAC2AAC.exe#FLAC2AAC.exe" --target "${{ github.sha }}" --title "FLAC2AAC latest" --notes "Latest verified Windows standalone build."
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete latest --cleanup-tag -y
+          }
+          gh release create latest "dist/FLAC2AAC.exe#FLAC2AAC.exe" "dist/FLAC2AAC.exe.sha256.txt#FLAC2AAC.exe.sha256.txt" --target "\${{ github.sha }}" --title "FLAC2AAC latest" --notes "Verified Windows standalone build. Unit tests, real FLAC-to-AAC end-to-end test, bundle validation, and GUI smoke test all passed."
