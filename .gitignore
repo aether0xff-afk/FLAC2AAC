@@ -7,3 +7,7 @@ build/
 dist/
 *.spec
 *.log
+
+# Private real-library smoke fixtures
+.smoke-data/
+smoke-data/
