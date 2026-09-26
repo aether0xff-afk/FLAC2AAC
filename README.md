@@ -8,11 +8,12 @@ FLAC 라이브러리와 LRC 가사를 한 번에 스캔해 중복 곡을 정리�
 ### FLAC 스캔
 - 선택한 음악 루트 폴더를 **하위 폴더까지 재귀 검색**
 - `.flac` / `.lrc` 파일을 전체 라이브러리에서 함께 탐색
-- FLAC의 `TITLE` 메타데이터를 우선 사용
+- FLAC의 `TITLE` / `ARTIST` 메타데이터를 우선 사용
 - FLAC에 `ARTIST`가 여러 개 있으면 `Artist A, Artist B`처럼 **`, ` 구분자**로 합쳐 GUI/파일명에 사용
-- TITLE이 없거나 FLAC을 정상 파싱하지 못하면 파일명에서 제목 추론
-  - `Artist - Title.flac` → `Title`
+- TITLE 또는 ARTIST가 없으면 `Artist - Title.flac` 파일명에서 각각 추론
+  - 표시용 제목/아티스트는 원래 대소문자를 보존
   - 구분자가 없으면 파일명 전체를 제목으로 사용
+- 메타데이터 파싱을 최대 16 worker로 병렬화해 대형 라이브러리 검색 속도를 개선
 - 검색은 별도 QThread에서 실행되어 GUI를 막지 않음
 - 검색 진행률과 현재 처리 중인 파일 표시
 
@@ -25,13 +26,15 @@ FLAC 라이브러리와 LRC 가사를 한 번에 스캔해 중복 곡을 정리�
   - 대소문자 무시
   - 공백 무시
   - 대부분의 특수문자/구두점 무시
-  - 한글/영문/숫자는 유지
+  - 특정 언어에 한정하지 않고 **모든 Unicode 문자/숫자**를 유지
 - 같은 제목의 LRC가 하나라도 있으면 **확인 단계 없이 자동 적용**
 - 같은 제목 후보가 여러 개면 다음 우선순위로 하나를 선택
   1. FLAC/LRC 파일명 정규화 값 일치
   2. FLAC과 같은 폴더
   3. Artist 일치
   4. 정렬된 후보 중 첫 번째
+- **LRC 1:1 전역 배정**: 한 LRC 파일은 자동 매칭에서 최대 한 곡에만 사용
+  - 동명곡이 여러 개이고 LRC가 부족하면 우선순위가 높은 곡에 먼저 배정하고 나머지는 `가사 없음` 처리
 - 상태는 `가사 있음` / `가사 없음` 두 가지만 사용
 - 별도의 `확인 필요` 상태 없음
 - 테이블에서 곡을 더블클릭하면 원하는 LRC를 직접 선택해 **수동 교체 가능**
@@ -99,8 +102,9 @@ GUI에서 `중복 제외 N`으로 제외된 개수를 표시합니다.
 - 기본값: CPU 코어 수의 절반 정도, 최대 8
 - 변환 진행률과 현재 곡 표시
 - 취소 버튼 지원
-  - 취소 요청 후 아직 시작하지 않은 작업은 건너뜀
-  - 이미 실행 중인 FFmpeg 작업은 완료될 수 있음
+  - 아직 시작하지 않은 작업은 즉시 취소 처리
+  - **이미 실행 중인 FFmpeg 프로세스도 종료 요청**하고 필요 시 강제 종료
+- 완료 창에서 `변환 / 기존 파일 건너뜀 / 실패 / 취소`를 분리 집계
 
 ### CMD 창 숨김
 Windows에서 FFmpeg 실행 시:
@@ -114,6 +118,9 @@ FFmpeg 버전 확인 시에도 같은 방식으로 창을 숨깁니다.
 
 ### FLAC 메타데이터 유지
 FFmpeg의 자동 metadata copy에 의존하지 않고, 변환 후 Mutagen으로 M4A 태그를 다시 구성합니다.
+
+- 원본 `TITLE`/`ARTIST` 태그가 없어도 스캔 단계에서 파일명으로 추론한 값을 M4A `Title`/`Artist`에 보충
+- 따라서 파일명에서만 알 수 있었던 제목/아티스트가 변환 후 사라지지 않음
 
 지원하는 표준 태그:
 - Title
@@ -232,9 +239,7 @@ FFmpeg는 현재 standalone EXE 내부에 포함하지 않습니다.
 PyInstaller의:
 - `--onefile`
 - `--windowed`
-- `--collect-all PyQt6`
-
-구성으로 Windows standalone EXE를 빌드합니다.
+- 필요한 PyQt6 모듈을 PyInstaller가 자동 추적하도록 구성해 Windows standalone EXE를 빌드합니다.
 
 standalone EXE에는:
 - Python runtime
@@ -269,7 +274,7 @@ build_exe.bat
 
 ```powershell
 py -3 -m pip install -r requirements-dev.txt
-py -3 -m PyInstaller --noconfirm --clean --onefile --windowed --name FLAC2AAC --collect-all PyQt6 app.py
+py -3 -m PyInstaller --noconfirm --clean --onefile --windowed --name FLAC2AAC app.py
 ```
 
 결과:
@@ -283,11 +288,19 @@ dist\FLAC2AAC.exe
 현재 워크플로:
 - main 브랜치 push 시 실행
 - 수동 `workflow_dispatch` 지원
-- Python 3.12 사용
-- requirements-dev 설치
-- pytest 실행
-- PyInstaller standalone EXE 빌드
+- 동일 release workflow는 최신 실행만 유지해 오래된 빌드가 최신 Release를 덮어쓰지 않게 함
+- Python 3.12 + pip cache 사용
+- FFmpeg/FFprobe 존재 확인, 없으면 설치
+- unit test + **실제 1초 FLAC을 생성해 AAC로 변환하는 end-to-end test** 실행
+  - AAC-LC 확인
+  - 추론 Title / 다중 Artist / Album Artist / Track / Disc / Genre / Date / BPM / Compilation 확인
+  - JPEG/PNG artwork 및 LRC `©lyr` 확인
+  - unknown Vorbis comment freeform 보존 확인
+  - 기존 출력 skip 및 사전 cancellation 확인
+- PyInstaller는 실제 import된 Qt 모듈만 묶어 불필요한 `--collect-all PyQt6`를 제거
+- Windows PE / Python runtime / PyQt6 / Mutagen 포함 여부 검증
 - 실제 EXE를 `--smoke-test`로 실행해 GUI 시작/종료 확인
+- SHA-256 체크섬 파일과 함께 `latest` Release에 게시
 
 ## 현재 설계상 의도
 - 폴더 구조를 보존하지 않고 output 하나에 모으기
