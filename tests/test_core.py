@@ -22,9 +22,9 @@ def test_filename_inference_preserves_case_and_artist():
     assert app.inferred_artist(path) == "Artist Name"
 
 
-def test_matching_key_keeps_non_latin_letters():
+def test_matching_key_keeps_non_latin_letters_and_ignores_diacritics():
     assert app.key("宇多田 ヒカル") == app.key("宇多田ヒカル")
-    assert app.key("Beyoncé!") == app.key("Beyoncé")
+    assert app.key("Beyoncé!") == app.key("Beyonce")
 
 
 def test_multiple_artists_use_commas_without_semicolons():
@@ -50,6 +50,7 @@ def test_flat_output_names_and_collision_numbering():
 
 def test_windows_reserved_output_name_is_escaped():
     assert app.safe_output_stem("CON") == "_CON"
+    assert app.safe_output_stem("CON.txt") == "_CON.txt"
     assert app.safe_output_stem('A:B?C') == "A_B_C"
 
 
